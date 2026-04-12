@@ -22,6 +22,7 @@ type Session struct {
 	pendingTypes  map[string][]int         // connectionId -> buffered frame message types
 	v1Server      *ClientConn
 	v1Client      *ClientConn
+	idleSince     time.Time // zero when session has active connections
 	logger        *slog.Logger
 }
 
@@ -47,6 +48,7 @@ func (s *Session) RegisterControl(conn *ClientConn) {
 		s.control.Close()
 	}
 	s.control = conn
+	s.updateIdleStateLocked()
 
 	// Send sync with current connection list
 	s.sendSyncLocked()
@@ -64,6 +66,7 @@ func (s *Session) ClearControl() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.control = nil
+	s.updateIdleStateLocked()
 }
 
 // RegisterClient adds a client socket for the given connectionId.
@@ -73,6 +76,7 @@ func (s *Session) RegisterClient(conn *ClientConn) {
 	defer s.mu.Unlock()
 
 	s.clientSockets[conn.ConnectionID] = append(s.clientSockets[conn.ConnectionID], conn)
+	s.updateIdleStateLocked()
 
 	s.notifyControlLocked(ControlMessage{
 		Type:         "connected",
@@ -90,6 +94,7 @@ func (s *Session) RegisterDataSocket(conn *ClientConn) {
 		existing.Close()
 	}
 	s.dataSockets[conn.ConnectionID] = conn
+	s.updateIdleStateLocked()
 
 	// Flush pending frames
 	if frames, ok := s.pending[conn.ConnectionID]; ok {
@@ -144,6 +149,7 @@ func (s *Session) RemoveClient(conn *ClientConn, connectionID string) {
 		Type:         "disconnected",
 		ConnectionID: &connectionID,
 	})
+	s.updateIdleStateLocked()
 }
 
 // RemoveDataSocket removes a daemon data socket and closes all matching clients.
@@ -159,6 +165,7 @@ func (s *Session) RemoveDataSocket(connectionID string) {
 		client.Close()
 	}
 	delete(s.clientSockets, connectionID)
+	s.updateIdleStateLocked()
 }
 
 // HandleClientMessage forwards a message from a client to the daemon data socket.
@@ -236,6 +243,7 @@ func (s *Session) SetV1Server(conn *ClientConn) {
 		s.v1Server.Close()
 	}
 	s.v1Server = conn
+	s.updateIdleStateLocked()
 }
 
 // GetV1Server returns the v1 server socket.
@@ -251,6 +259,7 @@ func (s *Session) ClearV1ServerIf(conn *ClientConn) {
 	defer s.mu.Unlock()
 	if s.v1Server == conn {
 		s.v1Server = nil
+		s.updateIdleStateLocked()
 	}
 }
 
@@ -259,6 +268,7 @@ func (s *Session) SetV1Client(conn *ClientConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.v1Client = conn
+	s.updateIdleStateLocked()
 }
 
 // GetV1Client returns the v1 client socket.
@@ -274,6 +284,7 @@ func (s *Session) ClearV1ClientIf(conn *ClientConn) {
 	defer s.mu.Unlock()
 	if s.v1Client == conn {
 		s.v1Client = nil
+		s.updateIdleStateLocked()
 	}
 }
 
@@ -284,6 +295,7 @@ func (s *Session) ClearControlIf(conn *ClientConn) {
 	if s.control == conn {
 		s.control = nil
 	}
+	s.updateIdleStateLocked()
 }
 
 // RemoveDataSocketIf removes a data socket only if it matches the given connection.
@@ -300,6 +312,7 @@ func (s *Session) RemoveDataSocketIf(connectionID string, conn *ClientConn) {
 		client.Close()
 	}
 	delete(s.clientSockets, connectionID)
+	s.updateIdleStateLocked()
 }
 
 // HasServerDataSocket returns true if a server data socket exists for the given connectionId.
@@ -332,6 +345,7 @@ func (s *Session) CloseControl() {
 		s.control.Close()
 		s.control = nil
 	}
+	s.updateIdleStateLocked()
 }
 
 // notifyControlLocked sends a control message. Must be called with mu held.
@@ -385,4 +399,81 @@ func (s *Session) bufferFrameLocked(connectionID string, msgType int, data []byt
 		s.pending[connectionID] = s.pending[connectionID][len(s.pending[connectionID])-maxPendingFrames:]
 		s.pendingTypes[connectionID] = s.pendingTypes[connectionID][len(s.pendingTypes[connectionID])-maxPendingFrames:]
 	}
+}
+
+// isEmptyLocked returns true if the session has no active connections.
+// Must be called with s.mu held.
+func (s *Session) isEmptyLocked() bool {
+	if s.control != nil {
+		return false
+	}
+	if s.v1Server != nil || s.v1Client != nil {
+		return false
+	}
+	if len(s.dataSockets) > 0 {
+		return false
+	}
+	for _, clients := range s.clientSockets {
+		if len(clients) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// updateIdleStateLocked tracks when a session becomes fully idle.
+// Must be called with s.mu held.
+func (s *Session) updateIdleStateLocked() {
+	if s.isEmptyLocked() {
+		if s.idleSince.IsZero() {
+			s.idleSince = time.Now()
+		}
+	} else {
+		s.idleSince = time.Time{}
+	}
+}
+
+// IsIdle returns true if the session has been idle for longer than maxIdle.
+func (s *Session) IsIdle(maxIdle time.Duration, now time.Time) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !s.isEmptyLocked() {
+		return false
+	}
+	if s.idleSince.IsZero() {
+		return false
+	}
+	return now.Sub(s.idleSince) > maxIdle
+}
+
+// CloseAll closes all connections in the session.
+func (s *Session) CloseAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.control != nil {
+		s.control.Close()
+		s.control = nil
+	}
+	if s.v1Server != nil {
+		s.v1Server.Close()
+		s.v1Server = nil
+	}
+	if s.v1Client != nil {
+		s.v1Client.Close()
+		s.v1Client = nil
+	}
+	for id, conn := range s.dataSockets {
+		conn.Close()
+		delete(s.dataSockets, id)
+	}
+	for id, clients := range s.clientSockets {
+		for _, c := range clients {
+			c.Close()
+		}
+		delete(s.clientSockets, id)
+	}
+	s.pending = make(map[string][][]byte)
+	s.pendingTypes = make(map[string][]int)
 }
