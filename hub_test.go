@@ -1,13 +1,17 @@
 package main
 
 import (
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
 func TestHubGetOrCreateSession(t *testing.T) {
-	hub := NewSessionHub()
+	hub := NewSessionHub(testLogger)
 
 	s1 := hub.GetOrCreateSession("server-1")
 	assert.NotNil(t, s1)
@@ -20,7 +24,7 @@ func TestHubGetOrCreateSession(t *testing.T) {
 }
 
 func TestHubRemoveSession(t *testing.T) {
-	hub := NewSessionHub()
+	hub := NewSessionHub(testLogger)
 
 	s := hub.GetOrCreateSession("server-1")
 	hub.RemoveSession("server-1")
@@ -35,7 +39,7 @@ func TestHubRemoveSession(t *testing.T) {
 }
 
 func TestHubActiveSessionCount(t *testing.T) {
-	hub := NewSessionHub()
+	hub := NewSessionHub(testLogger)
 
 	assert.Equal(t, 0, hub.ActiveCount())
 

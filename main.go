@@ -3,8 +3,9 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 )
 
 func main() {
@@ -17,15 +18,20 @@ func main() {
 
 	cfg := ResolveConfig(*listenAddr, *tlsCert, *tlsKey, *logLevel, *configPath)
 
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: parseLogLevel(cfg.LogLevel),
+	}))
 
-	log.Printf("[relay] starting server on %s (TLS: %v)", cfg.Listen, cfg.TLS.Enabled)
+	hub := NewSessionHub(logger)
+	srv := NewRelayServer(hub, logger)
+
+	logger.Info("starting relay server", "listen", cfg.Listen, "tls", cfg.TLS.Enabled)
 
 	if cfg.TLS.Enabled {
 		cert, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
 		if err != nil {
-			log.Fatalf("[relay] failed to load TLS certs: %v", err)
+			logger.Error("failed to load TLS certs", "error", err)
+			os.Exit(1)
 		}
 		server := &http.Server{
 			Addr:    cfg.Listen,
@@ -35,11 +41,26 @@ func main() {
 			},
 		}
 		if err := server.ListenAndServeTLS("", ""); err != nil {
-			log.Fatalf("[relay] TLS server error: %v", err)
+			logger.Error("TLS server error", "error", err)
+			os.Exit(1)
 		}
 	} else {
 		if err := http.ListenAndServe(cfg.Listen, srv); err != nil {
-			log.Fatalf("[relay] server error: %v", err)
+			logger.Error("server error", "error", err)
+			os.Exit(1)
 		}
+	}
+}
+
+func parseLogLevel(s string) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }

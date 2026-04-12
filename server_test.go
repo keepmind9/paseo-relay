@@ -14,8 +14,8 @@ import (
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -30,8 +30,8 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestWebSocketUpgradeMissingServerId(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws?role=server&v=2", nil)
 	w := httptest.NewRecorder()
@@ -42,8 +42,8 @@ func TestWebSocketUpgradeMissingServerId(t *testing.T) {
 }
 
 func TestWebSocketUpgradeInvalidRole(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws?serverId=test&role=invalid&v=2", nil)
 	w := httptest.NewRecorder()
@@ -54,8 +54,8 @@ func TestWebSocketUpgradeInvalidRole(t *testing.T) {
 }
 
 func TestWebSocketUpgradeInvalidVersion(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws?serverId=test&role=server&v=99", nil)
 	w := httptest.NewRecorder()
@@ -66,8 +66,8 @@ func TestWebSocketUpgradeInvalidVersion(t *testing.T) {
 }
 
 func TestWebSocketV2FullFlow(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
@@ -132,8 +132,8 @@ func TestWebSocketV2FullFlow(t *testing.T) {
 }
 
 func TestWebSocketV1Flow(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
@@ -165,8 +165,8 @@ func TestWebSocketV1Flow(t *testing.T) {
 }
 
 func TestBufferingBeforeDataSocket(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
@@ -210,8 +210,8 @@ func TestBufferingBeforeDataSocket(t *testing.T) {
 }
 
 func TestClientDisconnectClosesDataSocket(t *testing.T) {
-	hub := NewSessionHub()
-	srv := NewRelayServer(hub)
+	hub := NewSessionHub(testLogger)
+	srv := NewRelayServer(hub, testLogger)
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 

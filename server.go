@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	readTimeout   = 60 * time.Second
-	nudgeDelay    = 10 * time.Second
-	nudgeSecond   = 5 * time.Second
+	readTimeout = 60 * time.Second
+	nudgeDelay  = 10 * time.Second
+	nudgeSecond = 5 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -24,12 +24,13 @@ var upgrader = websocket.Upgrader{
 
 // RelayServer is the HTTP handler for the relay.
 type RelayServer struct {
-	hub *SessionHub
+	hub    *SessionHub
+	logger *slog.Logger
 }
 
 // NewRelayServer creates a new relay server backed by the given hub.
-func NewRelayServer(hub *SessionHub) *RelayServer {
-	return &RelayServer{hub: hub}
+func NewRelayServer(hub *SessionHub, logger *slog.Logger) *RelayServer {
+	return &RelayServer{hub: hub, logger: logger}
 }
 
 // ServeHTTP routes requests to /health or /ws.
@@ -80,7 +81,7 @@ func (rs *RelayServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[relay] WebSocket upgrade failed: %v", err)
+		rs.logger.Error("WebSocket upgrade failed", "error", err)
 		return
 	}
 
@@ -131,7 +132,6 @@ func (rs *RelayServer) readPump(session *Session, conn *ClientConn) {
 			return
 		}
 
-		// Reset read deadline on each message
 		conn.Ws.SetReadDeadline(time.Now().Add(readTimeout))
 
 		switch {
@@ -163,7 +163,6 @@ func (rs *RelayServer) handleV1Message(session *Session, conn *ClientConn, msgTy
 }
 
 // handleDisconnect cleans up when a WebSocket disconnects.
-// Only cleans up if the connection hasn't been replaced.
 func (rs *RelayServer) handleDisconnect(session *Session, conn *ClientConn) {
 	switch {
 	case conn.Version == "1":
@@ -181,9 +180,7 @@ func (rs *RelayServer) handleDisconnect(session *Session, conn *ClientConn) {
 	}
 }
 
-// nudgeOrResetControl implements the two-phase timeout from the original relay:
-// 1. After 10s, if no server data socket appeared, send a sync to the control socket
-// 2. After another 5s (15s total), if still no data socket, force-close the control
+// nudgeOrResetControl implements the two-phase timeout from the original relay.
 func (rs *RelayServer) nudgeOrResetControl(session *Session, connectionID string) {
 	time.Sleep(nudgeDelay)
 
@@ -194,7 +191,6 @@ func (rs *RelayServer) nudgeOrResetControl(session *Session, connectionID string
 		return
 	}
 
-	// First nudge: send a full sync list
 	session.SendSync()
 
 	time.Sleep(nudgeSecond)
@@ -206,8 +202,7 @@ func (rs *RelayServer) nudgeOrResetControl(session *Session, connectionID string
 		return
 	}
 
-	// Still nothing: force-close the control socket so the daemon reconnects
-	log.Printf("[relay] nudge: force-closing control for connectionId=%s (daemon unresponsive)", connectionID)
+	rs.logger.Warn("force-closing control socket (daemon unresponsive)", "connectionId", connectionID)
 	session.CloseControl()
 }
 

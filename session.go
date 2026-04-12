@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -16,22 +16,24 @@ type Session struct {
 	mu            sync.RWMutex
 	serverID      string
 	control       *ClientConn
-	dataSockets   map[string]*ClientConn  // connectionId -> daemon data socket
+	dataSockets   map[string]*ClientConn   // connectionId -> daemon data socket
 	clientSockets map[string][]*ClientConn // connectionId -> client sockets
 	pending       map[string][][]byte      // connectionId -> buffered frame data
 	pendingTypes  map[string][]int         // connectionId -> buffered frame message types
 	v1Server      *ClientConn
 	v1Client      *ClientConn
+	logger        *slog.Logger
 }
 
 // NewSession creates a new session for the given serverId.
-func NewSession(serverID string) *Session {
+func NewSession(serverID string, logger *slog.Logger) *Session {
 	return &Session{
 		serverID:      serverID,
 		dataSockets:   make(map[string]*ClientConn),
 		clientSockets: make(map[string][]*ClientConn),
 		pending:       make(map[string][][]byte),
 		pendingTypes:  make(map[string][]int),
+		logger:        logger,
 	}
 }
 
@@ -171,7 +173,7 @@ func (s *Session) HandleClientMessage(connectionID string, msgType int, data []b
 		return
 	}
 	if err := dataSocket.Send(msgType, data); err != nil {
-		log.Printf("[relay] failed to forward client->server(%s): %v", connectionID, err)
+		s.logger.Error("failed to forward client->server", "connectionId", connectionID, "error", err)
 		s.bufferFrameLocked(connectionID, msgType, data)
 	}
 }
@@ -184,7 +186,7 @@ func (s *Session) HandleDataMessage(connectionID string, msgType int, data []byt
 	clients := s.clientSockets[connectionID]
 	for _, client := range clients {
 		if err := client.Send(msgType, data); err != nil {
-			log.Printf("[relay] failed to forward server->client(%s): %v", connectionID, err)
+			s.logger.Error("failed to forward server->client", "connectionId", connectionID, "error", err)
 		}
 	}
 }
@@ -244,7 +246,6 @@ func (s *Session) GetV1Server() *ClientConn {
 }
 
 // ClearV1ServerIf clears the v1 server only if it matches the given connection.
-// This prevents a stale goroutine from clearing a replacement connection.
 func (s *Session) ClearV1ServerIf(conn *ClientConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -348,11 +349,11 @@ func (s *Session) sendControlLocked(msg ControlMessage) {
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("[relay] failed to marshal control message: %v", err)
+		s.logger.Error("failed to marshal control message", "error", err)
 		return
 	}
 	if err := s.control.Send(websocket.TextMessage, data); err != nil {
-		log.Printf("[relay] failed to send to control: %v", err)
+		s.logger.Error("failed to send to control", "error", err)
 		s.control.Close()
 	}
 }

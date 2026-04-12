@@ -1,17 +1,22 @@
 package main
 
-import "sync"
+import (
+	"log/slog"
+	"sync"
+)
 
 // SessionHub is a thread-safe registry of all active sessions.
 type SessionHub struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
+	logger   *slog.Logger
 }
 
 // NewSessionHub creates a new empty session hub.
-func NewSessionHub() *SessionHub {
+func NewSessionHub(logger *slog.Logger) *SessionHub {
 	return &SessionHub{
 		sessions: make(map[string]*Session),
+		logger:   logger,
 	}
 }
 
@@ -23,7 +28,7 @@ func (h *SessionHub) GetOrCreateSession(serverID string) *Session {
 	if s, ok := h.sessions[serverID]; ok {
 		return s
 	}
-	s := NewSession(serverID)
+	s := NewSession(serverID, h.logger)
 	h.sessions[serverID] = s
 	return s
 }

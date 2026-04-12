@@ -74,7 +74,7 @@ func newTestClientConn(v ProtocolVersion, role ConnectionRole, serverID, connID 
 // Instead, let's test the Session's internal state directly.
 
 func TestSessionControlConnect(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	control := &ClientConn{
 		Role:      RoleServer,
@@ -98,7 +98,7 @@ func TestSessionControlConnect(t *testing.T) {
 }
 
 func TestSessionClientConnectAndBuffer(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	control := &ClientConn{
 		Role:      RoleServer,
@@ -121,7 +121,7 @@ func TestSessionClientConnectAndBuffer(t *testing.T) {
 }
 
 func TestSessionClientMessageBuffering(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	control := &ClientConn{
 		Role:      RoleServer,
@@ -146,7 +146,7 @@ func TestSessionClientMessageBuffering(t *testing.T) {
 }
 
 func TestSessionPendingFrameLimit(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	// Buffer 250 messages — should cap at 200
 	for i := 0; i < 250; i++ {
@@ -156,7 +156,7 @@ func TestSessionPendingFrameLimit(t *testing.T) {
 }
 
 func TestSessionListConnectionIDs(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	control := &ClientConn{
 		Role:      RoleServer,
@@ -189,7 +189,7 @@ func TestSessionListConnectionIDs(t *testing.T) {
 }
 
 func TestSessionRemoveClientLastOne(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	control := &ClientConn{
 		Role:      RoleServer,
@@ -217,7 +217,7 @@ func TestSessionRemoveClientLastOne(t *testing.T) {
 
 func TestSessionRemoveDataSocketClosesClients(t *testing.T) {
 	// This is tested more thoroughly in e2e_test.go with real WebSockets
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	client := &ClientConn{
 		Role:         RoleClient,
@@ -233,7 +233,7 @@ func TestSessionRemoveDataSocketClosesClients(t *testing.T) {
 }
 
 func TestSessionV1ServerClient(t *testing.T) {
-	s := NewSession("test-server")
+	s := NewSession("test-server", testLogger)
 
 	server := &ClientConn{Role: RoleServer, Version: Version1, ServerID: "test-server"}
 	client := &ClientConn{Role: RoleClient, Version: Version1, ServerID: "test-server"}
