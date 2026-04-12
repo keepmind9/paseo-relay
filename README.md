@@ -150,6 +150,7 @@ For TLS, use a reverse proxy like nginx or Caddy in front of the relay.
 make build        # Build binary
 make test         # Run tests
 make fmt          # Format code
+make vet          # Run go vet
 make clean        # Remove binary
 ```
 

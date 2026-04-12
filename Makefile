@@ -1,4 +1,4 @@
-.PHONY: build test fmt clean run
+.PHONY: build test fmt vet clean run
 
 BINARY := paseo-relay
 
@@ -10,6 +10,9 @@ test:
 
 fmt:
 	gofmt -w .
+
+vet:
+	go vet ./...
 
 clean:
 	rm -f $(BINARY)

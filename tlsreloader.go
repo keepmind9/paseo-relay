@@ -10,11 +10,11 @@ import (
 // It holds the current certificate in memory and provides a GetCertificate
 // callback for tls.Config, plus a Reload method to update from disk.
 type TLSReloader struct {
-	mu     sync.RWMutex
-	cert   *tls.Certificate
+	mu       sync.RWMutex
+	cert     *tls.Certificate
 	certFile string
 	keyFile  string
-	logger *slog.Logger
+	logger   *slog.Logger
 }
 
 // NewTLSReloader creates a reloader and loads the initial certificate pair.

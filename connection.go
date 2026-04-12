@@ -9,10 +9,10 @@ import (
 
 // WebSocket close codes matching the TypeScript relay semantics.
 const (
-	CloseReplaced        = 1008 // Replaced by new connection
-	CloseClientGone      = 1001 // Server data socket closed because last client disconnected
-	CloseServerGone      = 1012 // Client sockets closed because server data socket disconnected
-	CloseControlFailure  = 1011 // Control socket closed due to send failure or unresponsiveness
+	CloseReplaced       = 1008 // Replaced by new connection
+	CloseClientGone     = 1001 // Server data socket closed because last client disconnected
+	CloseServerGone     = 1012 // Client sockets closed because server data socket disconnected
+	CloseControlFailure = 1011 // Control socket closed due to send failure or unresponsiveness
 
 	closeWriteWait = time.Second
 )
