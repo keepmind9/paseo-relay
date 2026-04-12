@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"log/slog"
@@ -37,15 +36,16 @@ func main() {
 		Handler: relayHandler,
 	}
 
+	var reloader *TLSReloader
+
 	if cfg.TLS.Enabled {
-		cert, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
+		var err error
+		reloader, err = NewTLSReloader(cfg.TLS.Cert, cfg.TLS.Key, logger)
 		if err != nil {
 			logger.Error("failed to load TLS certs", "error", err)
 			os.Exit(1)
 		}
-		httpServer.TLSConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		}
+		httpServer.TLSConfig = reloader.TLSConfig()
 	}
 
 	// Start session cleanup goroutine
@@ -67,12 +67,27 @@ func main() {
 
 	logger.Info("starting relay server", "listen", cfg.Listen, "tls", cfg.TLS.Enabled)
 
+	// Handle SIGHUP for TLS cert reload
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGHUP)
+	go func() {
+		for range sigCh {
+			if reloader != nil {
+				logger.Info("received SIGHUP, reloading TLS certificates")
+				reloader.Reload()
+			}
+		}
+	}()
+
 	// Wait for shutdown signal
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	<-sigCtx.Done()
 	logger.Info("shutting down gracefully", "timeout", shutdownTimeout)
+
+	// Stop signal handlers
+	signal.Stop(sigCh)
 
 	// Stop session cleanup
 	close(cleanupStop)
