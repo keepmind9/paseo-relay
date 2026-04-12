@@ -26,7 +26,8 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Config overrides
+# Config overrides (keep config.example.yaml in repo)
+config.yaml
 config.local.yaml
 *.local.yaml
 

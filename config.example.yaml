@@ -1,0 +1,31 @@
+# Paseo Relay Server Configuration
+#
+# Priority: CLI flags > env vars (PASEO_*) > config file > defaults
+#
+# Usage:
+#   ./paseo-relay -config config.local.yaml
+#   PASEO_LISTEN=0.0.0.0:443 ./paseo-relay
+
+# Server listen address (default: "0.0.0.0:8080")
+# Env: PASEO_LISTEN
+# Flag: -listen
+listen: "0.0.0.0:8080"
+
+# Log level: debug, info, warn, error (default: "info")
+# Env: PASEO_LOG_LEVEL
+# Flag: -log-level
+log_level: "info"
+
+# TLS configuration
+# When cert and key are both set, TLS is enabled automatically.
+# Reload certificates at runtime: kill -HUP <pid>
+tls:
+  enabled: false
+  # Path to TLS certificate file (PEM format)
+  # Env: PASEO_TLS_CERT
+  # Flag: -tls-cert
+  cert: ""
+  # Path to TLS private key file (PEM format)
+  # Env: PASEO_TLS_KEY
+  # Flag: -tls-key
+  key: ""

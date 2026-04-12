@@ -71,7 +71,7 @@ make build
 ./paseo-relay --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
 
 # With config file
-./paseo-relay --config /path/to/config.yaml
+./paseo-relay --config /path/to/config.yaml  # see config.example.yaml
 ```
 
 ### Configuration
@@ -80,11 +80,13 @@ Sources (priority: flags > env > config file > defaults):
 
 | Flag | Env | Default | Description |
 |---|---|---|---|
-| `--listen` | `LISTEN` | `0.0.0.0:8080` | Listen address |
-| `--tls-cert` | `TLS_CERT` | — | TLS certificate path |
-| `--tls-key` | `TLS_KEY` | — | TLS private key path |
-| `--log-level` | `LOG_LEVEL` | `info` | Log level: debug, info, warn, error |
+| `--listen` | `PASEO_LISTEN` | `0.0.0.0:8080` | Listen address |
+| `--tls-cert` | `PASEO_TLS_CERT` | — | TLS certificate path |
+| `--tls-key` | `PASEO_TLS_KEY` | — | TLS private key path |
+| `--log-level` | `PASEO_LOG_LEVEL` | `info` | Log level: debug, info, warn, error |
 | `--config` | — | — | Config file path |
+
+See [config.example.yaml](config.example.yaml) for a fully commented example.
 
 Example `config.yaml`:
 
