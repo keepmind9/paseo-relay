@@ -46,17 +46,18 @@ func LoadConfigFromFile(path string) (Config, error) {
 }
 
 // ApplyEnvOverrides sets config fields from environment variables.
+// All env vars use the PASEO_ prefix.
 func ApplyEnvOverrides(cfg *Config) {
-	if v := os.Getenv("LISTEN"); v != "" {
+	if v := os.Getenv("PASEO_LISTEN"); v != "" {
 		cfg.Listen = v
 	}
-	if v := os.Getenv("LOG_LEVEL"); v != "" {
+	if v := os.Getenv("PASEO_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
 	}
-	if v := os.Getenv("TLS_CERT"); v != "" {
+	if v := os.Getenv("PASEO_TLS_CERT"); v != "" {
 		cfg.TLS.Cert = v
 	}
-	if v := os.Getenv("TLS_KEY"); v != "" {
+	if v := os.Getenv("PASEO_TLS_KEY"); v != "" {
 		cfg.TLS.Key = v
 	}
 	if cfg.TLS.Cert != "" && cfg.TLS.Key != "" {

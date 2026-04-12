@@ -49,10 +49,10 @@ func TestLoadConfigFromFileNotFound(t *testing.T) {
 func TestApplyEnvOverrides(t *testing.T) {
 	cfg := DefaultConfig()
 
-	t.Setenv("LISTEN", "0.0.0.0:3000")
-	t.Setenv("LOG_LEVEL", "warn")
-	t.Setenv("TLS_CERT", "/env/cert.pem")
-	t.Setenv("TLS_KEY", "/env/key.pem")
+	t.Setenv("PASEO_LISTEN", "0.0.0.0:3000")
+	t.Setenv("PASEO_LOG_LEVEL", "warn")
+	t.Setenv("PASEO_TLS_CERT", "/env/cert.pem")
+	t.Setenv("PASEO_TLS_KEY", "/env/key.pem")
 
 	ApplyEnvOverrides(&cfg)
 	assert.Equal(t, "0.0.0.0:3000", cfg.Listen)

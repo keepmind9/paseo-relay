@@ -31,3 +31,4 @@ config.local.yaml
 *.local.yaml
 
 docs/plans
+HANDOFF.md
