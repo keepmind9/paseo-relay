@@ -7,6 +7,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// WebSocket close codes matching the TypeScript relay semantics.
+const (
+	CloseReplaced        = 1008 // Replaced by new connection
+	CloseClientGone      = 1001 // Server data socket closed because last client disconnected
+	CloseServerGone      = 1012 // Client sockets closed because server data socket disconnected
+	CloseControlFailure  = 1011 // Control socket closed due to send failure or unresponsiveness
+
+	closeWriteWait = time.Second
+)
+
 // ConnectionRole identifies whether a WebSocket belongs to the daemon or client.
 type ConnectionRole string
 
@@ -42,11 +52,21 @@ func (c *ClientConn) Send(messageType int, data []byte) error {
 	return c.Ws.WriteMessage(messageType, data)
 }
 
-// Close closes the underlying WebSocket connection.
+// Close closes the underlying WebSocket connection with a normal close code.
 func (c *ClientConn) Close() error {
 	if c.Ws == nil {
 		return nil
 	}
+	return c.Ws.Close()
+}
+
+// CloseWithCode sends a close frame with the given code and reason, then closes the connection.
+func (c *ClientConn) CloseWithCode(code int, reason string) error {
+	if c.Ws == nil {
+		return nil
+	}
+	msg := websocket.FormatCloseMessage(code, reason)
+	c.Ws.WriteControl(websocket.CloseMessage, msg, time.Now().Add(closeWriteWait))
 	return c.Ws.Close()
 }
 

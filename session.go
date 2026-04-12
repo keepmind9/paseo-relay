@@ -45,7 +45,7 @@ func (s *Session) RegisterControl(conn *ClientConn) {
 	defer s.mu.Unlock()
 
 	if s.control != nil {
-		s.control.Close()
+		s.control.CloseWithCode(CloseReplaced, "Replaced by new connection")
 	}
 	s.control = conn
 	s.updateIdleStateLocked()
@@ -91,7 +91,7 @@ func (s *Session) RegisterDataSocket(conn *ClientConn) {
 	defer s.mu.Unlock()
 
 	if existing, ok := s.dataSockets[conn.ConnectionID]; ok {
-		existing.Close()
+		existing.CloseWithCode(CloseReplaced, "Replaced by new connection")
 	}
 	s.dataSockets[conn.ConnectionID] = conn
 	s.updateIdleStateLocked()
@@ -141,7 +141,7 @@ func (s *Session) RemoveClient(conn *ClientConn, connectionID string) {
 
 	// Close data socket
 	if dataSocket, ok := s.dataSockets[connectionID]; ok {
-		dataSocket.Close()
+		dataSocket.CloseWithCode(CloseClientGone, "Client disconnected")
 		delete(s.dataSockets, connectionID)
 	}
 
@@ -162,7 +162,7 @@ func (s *Session) RemoveDataSocket(connectionID string) {
 	delete(s.pendingTypes, connectionID)
 
 	for _, client := range s.clientSockets[connectionID] {
-		client.Close()
+		client.CloseWithCode(CloseServerGone, "Server disconnected")
 	}
 	delete(s.clientSockets, connectionID)
 	s.updateIdleStateLocked()
@@ -240,7 +240,7 @@ func (s *Session) SetV1Server(conn *ClientConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.v1Server != nil {
-		s.v1Server.Close()
+		s.v1Server.CloseWithCode(CloseReplaced, "Replaced by new connection")
 	}
 	s.v1Server = conn
 	s.updateIdleStateLocked()
@@ -263,10 +263,13 @@ func (s *Session) ClearV1ServerIf(conn *ClientConn) {
 	}
 }
 
-// SetV1Client sets the v1 client socket.
+// SetV1Client sets the v1 client socket, replacing any existing one.
 func (s *Session) SetV1Client(conn *ClientConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.v1Client != nil {
+		s.v1Client.CloseWithCode(CloseReplaced, "Replaced by new connection")
+	}
 	s.v1Client = conn
 	s.updateIdleStateLocked()
 }
@@ -309,7 +312,7 @@ func (s *Session) RemoveDataSocketIf(connectionID string, conn *ClientConn) {
 	delete(s.pending, connectionID)
 	delete(s.pendingTypes, connectionID)
 	for _, client := range s.clientSockets[connectionID] {
-		client.Close()
+		client.CloseWithCode(CloseServerGone, "Server disconnected")
 	}
 	delete(s.clientSockets, connectionID)
 	s.updateIdleStateLocked()
@@ -342,7 +345,7 @@ func (s *Session) CloseControl() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.control != nil {
-		s.control.Close()
+		s.control.CloseWithCode(CloseControlFailure, "Control unresponsive")
 		s.control = nil
 	}
 	s.updateIdleStateLocked()
@@ -368,7 +371,7 @@ func (s *Session) sendControlLocked(msg ControlMessage) {
 	}
 	if err := s.control.Send(websocket.TextMessage, data); err != nil {
 		s.logger.Error("failed to send to control", "error", err)
-		s.control.Close()
+		s.control.CloseWithCode(CloseControlFailure, "Control send failed")
 	}
 }
 
