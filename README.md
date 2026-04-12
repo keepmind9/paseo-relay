@@ -8,43 +8,17 @@ The relay bridges WebSocket connections between the Paseo daemon (running on you
 
 The official Paseo relay runs on Cloudflare Workers. This project lets you self-host a relay on your own infrastructure without depending on Cloudflare.
 
-## Protocol
+## Features
 
-| Endpoint | Description |
-|---|---|
-| `GET /health` | Health check, returns `{"status":"ok"}` |
-| `GET /ws` | WebSocket upgrade endpoint |
-
-### WebSocket parameters
-
-| Param | Required | Description |
-|---|---|---|
-| `serverId` | yes | Identifies the daemon session |
-| `role` | yes | `server` or `client` |
-| `v` | no | Protocol version: `1` or `2` (default: `1`) |
-| `connectionId` | no | Per-client routing ID (required for v2 data sockets) |
-
-### v2 connection flow
-
-```
-Daemon                          Relay                         Client
-  │                               │                              │
-  │  WS /ws?role=server&v=2       │                              │
-  │  (control socket)              │                              │
-  │──────────────────────────────►│                              │
-  │  ◄── {type:"sync",...}        │                              │
-  │                               │  WS /ws?role=client&v=2      │
-  │                               │◄─────────────────────────────│
-  │  ◄── {type:"connected",...}   │                              │
-  │                               │                              │
-  │  WS /ws?role=server&          │                              │
-  │  connectionId=abc&v=2         │                              │
-  │──────────────────────────────►│                              │
-  │                               │  (E2EE handshake happens     │
-  │                               │   over the relay — relay     │
-  │                               │   cannot read content)       │
-  │  ◄───── encrypted data ──────►│◄───── encrypted data ──────►│
-```
+- Full v1 and v2 protocol compatibility with the original relay
+- Multiplexed connections — multiple clients per session
+- Frame buffering (200 frames) for late-joining daemons
+- Two-phase nudge/reset for unresponsive daemon detection
+- TLS with hot-reload via SIGHUP (zero-downtime cert rotation)
+- Graceful shutdown with 10s timeout
+- Idle session cleanup (auto-reap after 5 minutes)
+- Zero external dependencies beyond WebSocket and YAML libs
+- Single static binary, easy to deploy
 
 ## Install
 
@@ -56,6 +30,19 @@ Or with Make:
 
 ```bash
 make build
+```
+
+### Docker
+
+```bash
+docker build -t paseo-relay .
+docker run -p 8080:8080 paseo-relay
+
+# With TLS
+docker run -p 443:8080 \
+  -v /path/to/certs:/certs:ro \
+  paseo-relay \
+  --tls-cert /certs/cert.pem --tls-key /certs/key.pem
 ```
 
 ## Usage
@@ -99,6 +86,54 @@ tls:
   key: ""
 ```
 
+### TLS Certificate Hot-Reload
+
+Send `SIGHUP` to reload certificates without restarting:
+
+```bash
+kill -HUP $(pgrep paseo-relay)
+```
+
+Works with certbot: `certbot renew --deploy-hook "kill -HUP $(cat /run/paseo-relay.pid)"`
+
+## Protocol
+
+| Endpoint | Description |
+|---|---|
+| `GET /health` | Health check, returns `{"status":"ok"}` |
+| `GET /ws` | WebSocket upgrade endpoint |
+
+### WebSocket parameters
+
+| Param | Required | Description |
+|---|---|---|
+| `serverId` | yes | Identifies the daemon session |
+| `role` | yes | `server` or `client` |
+| `v` | no | Protocol version: `1` or `2` (default: `1`) |
+| `connectionId` | no | Per-client routing ID (required for v2 data sockets) |
+
+### v2 connection flow
+
+```
+Daemon                          Relay                         Client
+  │                               │                              │
+  │  WS /ws?role=server&v=2       │                              │
+  │  (control socket)              │                              │
+  │──────────────────────────────►│                              │
+  │  ◄── {type:"sync",...}        │                              │
+  │                               │  WS /ws?role=client&v=2      │
+  │                               │◄─────────────────────────────│
+  │  ◄── {type:"connected",...}   │                              │
+  │                               │                              │
+  │  WS /ws?role=server&          │                              │
+  │  connectionId=abc&v=2         │                              │
+  │──────────────────────────────►│                              │
+  │                               │  (E2EE handshake happens     │
+  │                               │   over the relay — relay     │
+  │                               │   cannot read content)       │
+  │  ◄───── encrypted data ──────►│◄───── encrypted data ──────►│
+```
+
 ## Configure Paseo daemon to use your relay
 
 When pairing via QR code or link, the daemon embeds the relay endpoint in the connection offer. Update your daemon config to point to your self-hosted relay:
@@ -118,6 +153,10 @@ make fmt          # Format code
 make clean        # Remove binary
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## License
 
-MIT
+[MIT](LICENSE)

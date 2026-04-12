@@ -31,5 +31,8 @@ config.yaml
 config.local.yaml
 *.local.yaml
 
+# AI tooling
+.claude/
+
 docs/plans
 HANDOFF.md

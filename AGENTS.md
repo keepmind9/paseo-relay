@@ -6,12 +6,6 @@ This project will be **open-sourced** publicly. **ALL code, documentation, and c
 
 This includes: variable/function names, error messages, comments, documentation, and commit messages.
 
-## Architecture Principles
-
-- **Adapter Pattern**: Use `CLIAdapter` and `BotAdapter` interfaces for extensibility
-- **Event-driven**: The `Engine` coordinates message flow between bots and CLI tools
-- **Two modes**: Support both hook mode (real-time) and polling mode (zero-config)
-
 ## Testing
 
 - Use `github.com/stretchr/testify` for all tests
