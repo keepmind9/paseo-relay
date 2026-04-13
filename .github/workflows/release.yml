@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          VERSION=${GITHUB_REF_NAME#v}
+
+          targets=(
+            "linux/amd64"
+            "linux/arm64"
+            "darwin/amd64"
+            "darwin/arm64"
+            "windows/amd64"
+          )
+
+          for target in "${targets[@]}"; do
+            IFS='/' read -r GOOS GOARCH <<< "$target"
+            BINARY="paseo-relay_${GOOS}_${GOARCH}"
+            [ "$GOOS" = "windows" ] && BINARY="${BINARY}.exe"
+
+            echo "Building $BINARY..."
+            CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH \
+              go build -ldflags "-s -w" -o "dist/$BINARY" .
+          done
+
+      - name: Package
+        run: |
+          cd dist
+          for f in paseo-relay_linux_*; do
+            tar czf "${f}.tar.gz" "$f"
+          done
+          for f in paseo-relay_darwin_*; do
+            tar czf "${f}.tar.gz" "$f"
+          done
+          for f in paseo-relay_windows_*; do
+            zip "${f%.exe}.zip" "$f"
+          done
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.zip > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
