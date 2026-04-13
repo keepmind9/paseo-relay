@@ -2,6 +2,8 @@
 
 A standalone Go relay server for [Paseo](https://github.com/getpaseo/paseo), fully compatible with the original Paseo relay protocol (v1 and v2).
 
+**[中文文档](README_CN.md)**
+
 The relay bridges WebSocket connections between the Paseo daemon (running on your machine) and mobile/desktop clients. It forwards encrypted traffic without inspecting content — all E2EE is handled end-to-end by the daemon and client.
 
 ## Why
@@ -136,13 +138,61 @@ Daemon                          Relay                         Client
 
 ## Configure Paseo daemon to use your relay
 
-When pairing via QR code or link, the daemon embeds the relay endpoint in the connection offer. Update your daemon config to point to your self-hosted relay:
+Edit `~/.paseo/config.json` on the machine running the Paseo daemon:
 
-```
-relay.paseo.sh:443  →  your-relay-host:8080
+```json
+{
+  "version": 1,
+  "daemon": {
+    "relay": {
+      "enabled": true,
+      "endpoint": "your-relay.example.com:443",
+      "publicEndpoint": "your-relay.example.com:443"
+    }
+  }
+}
 ```
 
-For TLS, use a reverse proxy like nginx or Caddy in front of the relay.
+Or set environment variables (higher priority than config file):
+
+```bash
+export PASEO_RELAY_ENDPOINT="your-relay.example.com:443"
+export PASEO_RELAY_PUBLIC_ENDPOINT="your-relay.example.com:443"
+```
+
+- `endpoint` — address the daemon uses to connect to the relay (**host:port only, no `https://` prefix** — the daemon automatically uses `wss://` for TLS)
+- `publicEndpoint` — address embedded in pairing QR codes/links for clients. Same format rules as `endpoint`. Set this if the daemon reaches the relay through a different address than clients do (e.g. internal IP vs. public domain)
+
+Restart the daemon after making changes.
+
+## Reverse proxy (Nginx example)
+
+The relay itself speaks plain WebSocket on HTTP. In production, put it behind a reverse proxy that handles TLS and sets sufficiently long timeouts — WebSocket connections are long-lived.
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-relay.example.com;
+
+    ssl_certificate     /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket connections are long-lived; use generous timeouts
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+```
 
 ## Development
 
