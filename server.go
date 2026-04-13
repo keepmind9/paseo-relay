@@ -81,9 +81,23 @@ func (rs *RelayServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		rs.logger.Error("WebSocket upgrade failed", "error", err)
+		rs.logger.Error("WebSocket upgrade failed",
+			"serverId", serverID,
+			"role", role,
+			"version", version,
+			"connectionId", connectionID,
+			"error", err,
+		)
 		return
 	}
+
+	rs.logger.Info("WebSocket connected",
+		"serverId", serverID,
+		"role", role,
+		"version", version,
+		"connectionId", connectionID,
+		"remoteAddr", ws.RemoteAddr().String(),
+	)
 
 	conn := &ClientConn{
 		Ws:           ws,
@@ -129,6 +143,17 @@ func (rs *RelayServer) readPump(session *Session, conn *ClientConn) {
 	for {
 		msgType, data, err := conn.Ws.ReadMessage()
 		if err != nil {
+			isNormalClose := websocket.IsCloseError(err, websocket.CloseNormalClosure)
+			isPeerClosed := strings.Contains(err.Error(), "use of closed network connection")
+			if !isNormalClose && !isPeerClosed {
+				rs.logger.Warn("readPump error",
+					"serverId", conn.ServerID,
+					"role", string(conn.Role),
+					"version", string(conn.Version),
+					"connectionId", conn.ConnectionID,
+					"error", err,
+				)
+			}
 			return
 		}
 
