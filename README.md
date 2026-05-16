@@ -147,7 +147,8 @@ Edit `~/.paseo/config.json` on the machine running the Paseo daemon:
     "relay": {
       "enabled": true,
       "endpoint": "your-relay.example.com:443",
-      "publicEndpoint": "your-relay.example.com:443"
+      "publicEndpoint": "your-relay.example.com:443",
+      "useTls": true
     }
   }
 }
@@ -158,10 +159,12 @@ Or set environment variables (higher priority than config file):
 ```bash
 export PASEO_RELAY_ENDPOINT="your-relay.example.com:443"
 export PASEO_RELAY_PUBLIC_ENDPOINT="your-relay.example.com:443"
+export PASEO_RELAY_USE_TLS=true
 ```
 
-- `endpoint` — address the daemon uses to connect to the relay (**host:port only, no `https://` prefix** — the daemon automatically uses `wss://` for TLS)
+- `endpoint` — address the daemon uses to connect to the relay (**host:port only, no `https://` prefix**)
 - `publicEndpoint` — address embedded in pairing QR codes/links for clients. Same format rules as `endpoint`. Set this if the daemon reaches the relay through a different address than clients do (e.g. internal IP vs. public domain)
+- `useTls` — **must be `true`** if your relay is behind a TLS-terminating reverse proxy (Nginx, Caddy, etc.). The daemon defaults to `false` for non-official endpoints, which causes it to send plain HTTP to your HTTPS port, resulting in 400 errors
 
 Restart the daemon after making changes.
 

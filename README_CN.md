@@ -144,7 +144,8 @@ kill -HUP $(pgrep paseo-relay)
     "relay": {
       "enabled": true,
       "endpoint": "your-relay.example.com:443",
-      "publicEndpoint": "your-relay.example.com:443"
+      "publicEndpoint": "your-relay.example.com:443",
+      "useTls": true
     }
   }
 }
@@ -155,10 +156,12 @@ kill -HUP $(pgrep paseo-relay)
 ```bash
 export PASEO_RELAY_ENDPOINT="your-relay.example.com:443"
 export PASEO_RELAY_PUBLIC_ENDPOINT="your-relay.example.com:443"
+export PASEO_RELAY_USE_TLS=true
 ```
 
-- `endpoint` — 守护进程连接中继的地址（**只填 host:port，不要加 `https://` 前缀** — 守护进程会自动使用 `wss://`）
+- `endpoint` — 守护进程连接中继的地址（**只填 host:port，不要加 `https://` 前缀**）
 - `publicEndpoint` — 嵌入配对二维码/链接中的地址，格式规则同上。如果守护进程和客户端通过不同地址访问中继（例如内网 IP vs 公网域名），则需要单独设置此项
+- `useTls` — 如果中继前面有 TLS 反向代理（Nginx、Caddy 等），**必须设为 `true`**。守护进程对非官方端点默认 `false`，会导致明文请求发到 HTTPS 端口而报 400 错误
 
 修改后需要重启守护进程。
 
