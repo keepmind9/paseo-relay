@@ -194,6 +194,21 @@ server {
 }
 ```
 
+## Upstream Sync
+
+Based on [getpaseo/paseo](https://github.com/getpaseo/paseo) relay server (`packages/relay/src/cloudflare-adapter.ts`).
+
+| Date | Upstream Commit | Note |
+|---|---|---|
+| 2026-05-13 | [`d24087c1`](https://github.com/getpaseo/paseo/commit/d24087c1) | Fix relay E2EE reconnect races; add legacy JSON ping compat log |
+
+To diff against latest upstream:
+
+```bash
+git clone https://github.com/getpaseo/paseo.git /tmp/paseo
+diff <(git show d24087c1:packages/relay/src/cloudflare-adapter.ts) /tmp/paseo/packages/relay/src/cloudflare-adapter.ts
+```
+
 ## Development
 
 ```bash

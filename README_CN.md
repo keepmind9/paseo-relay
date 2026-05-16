@@ -191,6 +191,21 @@ server {
 }
 ```
 
+## 上游同步
+
+基于 [getpaseo/paseo](https://github.com/getpaseo/paseo) 中继服务端（`packages/relay/src/cloudflare-adapter.ts`）实现。
+
+| 日期 | 上游 Commit | 备注 |
+|---|---|---|
+| 2026-05-13 | [`d24087c1`](https://github.com/getpaseo/paseo/commit/d24087c1) | 修复 relay E2EE 重连竞态；添加 legacy JSON ping 兼容日志 |
+
+与最新上游对比：
+
+```bash
+git clone https://github.com/getpaseo/paseo.git /tmp/paseo
+diff <(git show d24087c1:packages/relay/src/cloudflare-adapter.ts) /tmp/paseo/packages/relay/src/cloudflare-adapter.ts
+```
+
 ## 开发
 
 ```bash
