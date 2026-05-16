@@ -122,11 +122,18 @@ func (s *Session) RemoveClient(conn *ClientConn, connectionID string) {
 	defer s.mu.Unlock()
 
 	clients := s.clientSockets[connectionID]
+	found := false
 	filtered := make([]*ClientConn, 0, len(clients))
 	for _, c := range clients {
-		if c != conn {
-			filtered = append(filtered, c)
+		if c == conn {
+			found = true
+			continue
 		}
+		filtered = append(filtered, c)
+	}
+
+	if !found {
+		return
 	}
 
 	if len(filtered) > 0 {

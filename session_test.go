@@ -188,6 +188,40 @@ func TestSessionListConnectionIDs(t *testing.T) {
 	assert.ElementsMatch(t, []string{"conn_a", "conn_b"}, ids)
 }
 
+func TestSessionRemoveClientNotFound(t *testing.T) {
+	s := NewSession("test-server", testLogger)
+
+	control := &ClientConn{
+		Role:      RoleServer,
+		Version:   Version2,
+		ServerID:  "test-server",
+		CreatedAt: time.Now(),
+	}
+	s.RegisterControl(control)
+
+	client := &ClientConn{
+		Role:         RoleClient,
+		Version:      Version2,
+		ServerID:     "test-server",
+		ConnectionID: "conn_nf",
+		CreatedAt:    time.Now(),
+	}
+	s.RegisterClient(client)
+
+	// Remove a conn that was never added — should be a no-op
+	phantom := &ClientConn{
+		Role:         RoleClient,
+		Version:      Version2,
+		ServerID:     "test-server",
+		ConnectionID: "conn_nf",
+		CreatedAt:    time.Now(),
+	}
+	s.RemoveClient(phantom, "conn_nf")
+
+	// Original client must still be present
+	assert.Equal(t, 1, len(s.clientSockets["conn_nf"]))
+}
+
 func TestSessionRemoveClientLastOne(t *testing.T) {
 	s := NewSession("test-server", testLogger)
 
