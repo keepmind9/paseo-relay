@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	readTimeout = 60 * time.Second
-	nudgeDelay  = 10 * time.Second
-	nudgeSecond = 5 * time.Second
+	readTimeout  = 90 * time.Second
+	pingInterval = 30 * time.Second
+	nudgeDelay   = 10 * time.Second
+	nudgeSecond  = 5 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -117,17 +118,35 @@ func (rs *RelayServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		} else {
 			session.SetV1Client(conn)
 		}
+		go rs.pingLoop(conn)
 		go rs.readPump(session, conn)
 	case conn.IsControl():
 		session.RegisterControl(conn)
+		go rs.pingLoop(conn)
 		go rs.readPump(session, conn)
 	case conn.IsServerData():
 		session.RegisterDataSocket(conn)
+		go rs.pingLoop(conn)
 		go rs.readPump(session, conn)
 	case conn.IsClient():
 		session.RegisterClient(conn)
 		go rs.nudgeOrResetControl(session, connectionID)
+		go rs.pingLoop(conn)
 		go rs.readPump(session, conn)
+	}
+}
+
+// pingLoop periodically sends WebSocket pings to keep the connection alive.
+func (rs *RelayServer) pingLoop(conn *ClientConn) {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		conn.mu.Lock()
+		err := conn.Ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
+		conn.mu.Unlock()
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -139,6 +158,10 @@ func (rs *RelayServer) readPump(session *Session, conn *ClientConn) {
 	}()
 
 	conn.Ws.SetReadDeadline(time.Now().Add(readTimeout))
+	conn.Ws.SetPongHandler(func(string) error {
+		conn.Ws.SetReadDeadline(time.Now().Add(readTimeout))
+		return nil
+	})
 
 	for {
 		msgType, data, err := conn.Ws.ReadMessage()
