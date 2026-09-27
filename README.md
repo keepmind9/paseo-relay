@@ -204,6 +204,7 @@ Based on [getpaseo/paseo](https://github.com/getpaseo/paseo) relay server (`pack
 | Date | Upstream Commit | Note |
 |---|---|---|
 | 2026-05-13 | [`d24087c1`](https://github.com/getpaseo/paseo/commit/d24087c1) | Fix relay E2EE reconnect races; add legacy JSON ping compat log |
+| 2026-07-11 | [`5ae53c7e`](https://github.com/getpaseo/paseo/commit/5ae53c7e) | Reviewed. Adds `PASEO_RELAY_UPSTREAM` cutover proxy for Cloudflare→Fly infra migration; no protocol changes. Cloudflare-specific ops, not ported |
 
 To diff against latest upstream:
 

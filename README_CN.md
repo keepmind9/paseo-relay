@@ -201,6 +201,7 @@ server {
 | 日期 | 上游 Commit | 备注 |
 |---|---|---|
 | 2026-05-13 | [`d24087c1`](https://github.com/getpaseo/paseo/commit/d24087c1) | 修复 relay E2EE 重连竞态；添加 legacy JSON ping 兼容日志 |
+| 2026-07-11 | [`5ae53c7e`](https://github.com/getpaseo/paseo/commit/5ae53c7e) | 已审查。新增 `PASEO_RELAY_UPSTREAM` 切换代理，用于 Cloudflare→Fly 基础设施迁移；协议无变化。属 Cloudflare 运维专属，不移植 |
 
 与最新上游对比：
 
