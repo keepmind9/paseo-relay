@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	readTimeout  = 90 * time.Second
-	pingInterval = 30 * time.Second
-	nudgeDelay   = 10 * time.Second
-	nudgeSecond  = 5 * time.Second
+	readTimeout   = 90 * time.Second
+	pingInterval  = 30 * time.Second
+	pingWriteWait = 5 * time.Second
+	nudgeDelay    = 10 * time.Second
+	nudgeSecond   = 5 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -118,41 +119,73 @@ func (rs *RelayServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		} else {
 			session.SetV1Client(conn)
 		}
-		go rs.pingLoop(conn)
-		go rs.readPump(session, conn)
+		rs.startConnection(session, conn)
 	case conn.IsControl():
 		session.RegisterControl(conn)
-		go rs.pingLoop(conn)
-		go rs.readPump(session, conn)
+		rs.startConnection(session, conn)
 	case conn.IsServerData():
 		session.RegisterDataSocket(conn)
-		go rs.pingLoop(conn)
-		go rs.readPump(session, conn)
+		rs.startConnection(session, conn)
 	case conn.IsClient():
 		session.RegisterClient(conn)
 		go rs.nudgeOrResetControl(session, connectionID)
-		go rs.pingLoop(conn)
-		go rs.readPump(session, conn)
+		rs.startConnection(session, conn)
 	}
 }
 
+// startConnection launches the read pump and the keepalive ping loop for a
+// connection. The ping loop stops when the read pump tears the connection
+// down.
+func (rs *RelayServer) startConnection(session *Session, conn *ClientConn) {
+	done := make(chan struct{})
+	go rs.pingLoop(conn, done)
+	go rs.readPump(session, conn, done)
+}
+
 // pingLoop periodically sends WebSocket pings to keep the connection alive.
-func (rs *RelayServer) pingLoop(conn *ClientConn) {
+// It stops when the read pump tears the connection down (done closed).
+//
+// A failed ping never stops the loop: WriteControl can fail transiently on a
+// healthy connection (a concurrent data write holds the socket, or a slow
+// peer blocks the send buffer), yet gorilla/websocket documents WriteControl
+// as safe to call concurrently with data writes. Connection liveness has a
+// single authority — the read deadline in readPump: once the peer stops
+// answering (pongs included), readPump fails, tears the connection down and
+// closes done, which stops this loop.
+func (rs *RelayServer) pingLoop(conn *ClientConn, done <-chan struct{}) {
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
-	for range ticker.C {
-		conn.mu.Lock()
-		err := conn.Ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
-		conn.mu.Unlock()
-		if err != nil {
+	for {
+		select {
+		case <-done:
 			return
+		case <-ticker.C:
+			if err := conn.Ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(pingWriteWait)); err != nil {
+				// A write racing the teardown (close(done) then conn.Close())
+				// is teardown noise, not a keepalive failure — exit silently.
+				select {
+				case <-done:
+					return
+				default:
+				}
+				rs.logger.Warn("keepalive ping failed",
+					"serverId", conn.ServerID,
+					"role", string(conn.Role),
+					"version", string(conn.Version),
+					"connectionId", conn.ConnectionID,
+					"error", err,
+				)
+			}
 		}
 	}
 }
 
 // readPump reads messages from a WebSocket and dispatches them.
-func (rs *RelayServer) readPump(session *Session, conn *ClientConn) {
+func (rs *RelayServer) readPump(session *Session, conn *ClientConn, done chan<- struct{}) {
 	defer func() {
+		// close(done) stops the ping loop first; an in-flight ping that then
+		// fails on conn.Close() is filtered by the loop as teardown noise.
+		close(done)
 		conn.Close()
 		rs.handleDisconnect(session, conn)
 	}()
