@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -321,4 +324,87 @@ func TestGenerateConnectionID(t *testing.T) {
 	id := generateConnectionID()
 	assert.True(t, strings.HasPrefix(id, "conn_"))
 	assert.Equal(t, 21, len(id), "conn_ + 16 hex chars")
+}
+
+// recordingHandler captures slog records so tests can assert on log levels.
+type recordingHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+
+func (h *recordingHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(name string) slog.Handler       { return h }
+
+// recordsMatching returns the messages of captured records at the given level
+// whose message equals msg.
+func (h *recordingHandler) recordsMatching(level slog.Level, msg string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var matched []string
+	for _, r := range h.records {
+		if r.Level == level && r.Message == msg {
+			matched = append(matched, r.Message)
+		}
+	}
+	return matched
+}
+
+// TestReadPumpLogsGracefulCloseAsInfo covers the log classification of
+// readPump teardown: a peer-initiated graceful close (close frame with 1000,
+// 1001 or 1005) is part of the connection lifecycle and logs at Info, while
+// an abrupt teardown without a close frame (abnormal closure) logs at Warn.
+func TestReadPumpLogsGracefulCloseAsInfo(t *testing.T) {
+	tests := []struct {
+		name         string
+		closeCode    int
+		wantLogLevel slog.Level
+	}{
+		{name: "normal closure 1000", closeCode: websocket.CloseNormalClosure, wantLogLevel: slog.LevelInfo},
+		{name: "going away 1001", closeCode: websocket.CloseGoingAway, wantLogLevel: slog.LevelInfo},
+		{name: "no status 1005", closeCode: websocket.CloseNoStatusReceived, wantLogLevel: slog.LevelInfo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := &recordingHandler{}
+			logger := slog.New(handler)
+			hub := NewSessionHub(logger)
+			srv := NewRelayServer(hub, logger)
+			ts := httptest.NewServer(srv)
+			defer ts.Close()
+
+			wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+			clientWs, _, err := websocket.DefaultDialer.Dial(wsURL+"/ws?serverId=close-log&role=server&v=2", nil)
+			require.NoError(t, err)
+
+			// Peer sends a close frame with the code under test, then drops.
+			require.NoError(t, clientWs.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(tt.closeCode, "bye"), time.Now().Add(time.Second)))
+			clientWs.Close()
+
+			deadline := time.Now().Add(3 * time.Second)
+			// Poll for the teardown record itself, not just any record at the
+			// expected level: the "WebSocket connected" handshake record is
+			// also logged at Info, which would mask a misclassified close.
+			for time.Now().Before(deadline) {
+				if msgs := handler.recordsMatching(tt.wantLogLevel, "connection closed"); len(msgs) > 0 {
+					return // teardown classified as expected
+				}
+				if warns := handler.recordsMatching(slog.LevelWarn, "connection lost"); len(warns) > 0 {
+					t.Fatalf("graceful close logged as Warn: %v", warns)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			t.Fatalf("no \"connection closed\" log at level %v within timeout", tt.wantLogLevel)
+		})
+	}
 }

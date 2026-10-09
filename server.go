@@ -199,10 +199,25 @@ func (rs *RelayServer) readPump(session *Session, conn *ClientConn, done chan<- 
 	for {
 		msgType, data, err := conn.Ws.ReadMessage()
 		if err != nil {
-			isNormalClose := websocket.IsCloseError(err, websocket.CloseNormalClosure)
-			isPeerClosed := strings.Contains(err.Error(), "use of closed network connection")
-			if !isNormalClose && !isPeerClosed {
-				rs.logger.Warn("readPump error",
+			// Graceful teardown is part of the connection lifecycle, not an
+			// error: the peer sending a close frame (1000, and the no-code
+			// variant the daemon's ws.close() emits, plus 1001 going-away),
+			// or the local socket closing as part of our own cleanup.
+			graceful := websocket.IsCloseError(err,
+				websocket.CloseNormalClosure,    // 1000
+				websocket.CloseGoingAway,        // 1001
+				websocket.CloseNoStatusReceived, // 1005
+			) || strings.Contains(err.Error(), "use of closed network connection")
+			if graceful {
+				rs.logger.Info("connection closed",
+					"serverId", conn.ServerID,
+					"role", string(conn.Role),
+					"version", string(conn.Version),
+					"connectionId", conn.ConnectionID,
+					"error", err,
+				)
+			} else {
+				rs.logger.Warn("connection lost",
 					"serverId", conn.ServerID,
 					"role", string(conn.Role),
 					"version", string(conn.Version),
