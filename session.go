@@ -368,12 +368,18 @@ func (s *Session) notifyControlLocked(msg ControlMessage) {
 
 // sendControlLocked marshals and sends a control message. Must be called with mu held.
 func (s *Session) sendControlLocked(msg ControlMessage) {
-	if s.control == nil || s.control.Ws == nil {
-		return
-	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		s.logger.Error("failed to marshal control message", "error", err)
+		return
+	}
+	s.sendControlJSONLocked(data)
+}
+
+// sendControlJSONLocked writes a pre-marshaled control message to the control
+// socket. Must be called with mu held.
+func (s *Session) sendControlJSONLocked(data []byte) {
+	if s.control == nil || s.control.Ws == nil {
 		return
 	}
 	if err := s.control.Send(websocket.TextMessage, data); err != nil {
@@ -382,18 +388,31 @@ func (s *Session) sendControlLocked(msg ControlMessage) {
 	}
 }
 
+// syncMessage is the wire form of a sync control message. Unlike
+// ControlMessage, it always serializes connectionIds: the daemon only accepts
+// a sync when connectionIds is a JSON array (an empty list included). An
+// omitted field makes the daemon discard the sync, hit its 8s control-ready
+// timeout and terminate the socket without a close frame — surfacing on the
+// relay as close 1006 in a 38s reconnect loop.
+type syncMessage struct {
+	Type          string   `json:"type"`
+	ConnectionIDs []string `json:"connectionIds"`
+}
+
 // sendSyncLocked sends a sync message with current connection IDs.
 func (s *Session) sendSyncLocked() {
-	var ids []string
+	ids := make([]string, 0, len(s.clientSockets))
 	for id, clients := range s.clientSockets {
 		if len(clients) > 0 {
 			ids = append(ids, id)
 		}
 	}
-	s.notifyControlLocked(ControlMessage{
-		Type:          "sync",
-		ConnectionIDs: ids,
-	})
+	data, err := json.Marshal(syncMessage{Type: "sync", ConnectionIDs: ids})
+	if err != nil {
+		s.logger.Error("failed to marshal sync message", "error", err)
+		return
+	}
+	s.sendControlJSONLocked(data)
 }
 
 // bufferFrameLocked appends a frame to the pending buffer.

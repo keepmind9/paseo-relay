@@ -131,6 +131,71 @@ func TestWebSocketV2FullFlow(t *testing.T) {
 	assert.Equal(t, "hello from daemon", string(msg))
 }
 
+// TestControlSyncAlwaysCarriesConnectionIdsArray mirrors the daemon's
+// ready-handshake validation: a sync message only counts as valid when
+// connectionIds is a JSON array (an empty list included). ControlMessage
+// serializes with omitempty, so an empty list used to drop the field
+// entirely and the daemon discarded the sync, hit its 8s ready timeout and
+// terminated the socket without a close frame — surfacing on the relay as
+// close 1006 in a 38-second reconnect loop for any idle daemon.
+func TestControlSyncAlwaysCarriesConnectionIdsArray(t *testing.T) {
+	tests := []struct {
+		name         string
+		prepare      func(t *testing.T, wsURL string) (cleanup func())
+		wantSyncData string
+	}{
+		{
+			name:         "idle daemon with no clients",
+			prepare:      nil,
+			wantSyncData: "[]",
+		},
+		{
+			name: "daemon reconnecting with an existing client",
+			prepare: func(t *testing.T, wsURL string) func() {
+				clientWs, _, err := websocket.DefaultDialer.Dial(wsURL+"/ws?serverId=sync-shape&role=client&connectionId=conn_1&v=2", nil)
+				require.NoError(t, err)
+				return func() { clientWs.Close() }
+			},
+			wantSyncData: `["conn_1"]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hub := NewSessionHub(testLogger)
+			srv := NewRelayServer(hub, testLogger)
+			ts := httptest.NewServer(srv)
+			defer ts.Close()
+
+			wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+			if tt.prepare != nil {
+				cleanup := tt.prepare(t, wsURL)
+				defer cleanup()
+			}
+
+			controlWs, _, err := websocket.DefaultDialer.Dial(wsURL+"/ws?serverId=sync-shape&role=server&v=2", nil)
+			require.NoError(t, err)
+			defer controlWs.Close()
+
+			controlWs.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_, msg, err := controlWs.ReadMessage()
+			require.NoError(t, err)
+
+			// Raw-message check: unmarshal into any or a struct would lose
+			// the distinction between a missing field and [].
+			var wire struct {
+				Type          string          `json:"type"`
+				ConnectionIDs json.RawMessage `json:"connectionIds"`
+			}
+			require.NoError(t, json.Unmarshal(msg, &wire))
+			assert.Equal(t, "sync", wire.Type)
+			assert.Equal(t, tt.wantSyncData, string(wire.ConnectionIDs),
+				"daemon requires Array.isArray(connectionIds) on every sync")
+		})
+	}
+}
+
 func TestWebSocketV1Flow(t *testing.T) {
 	hub := NewSessionHub(testLogger)
 	srv := NewRelayServer(hub, testLogger)
